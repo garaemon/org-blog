@@ -123,22 +123,61 @@ org-blog."
   (expand-file-name org-blog-root-dir))
 
 (defun org-blog-file-name->url (fname)
+  "This function take a file name `fname' and returns the url of the
+remote server. This function expects `fname' is in `org-blog-root-dir'.
+This function also replaces file name suffix .org to .html."
   (interactive)
   (replace-regexp-in-string
-   "\.org$"
+   (concat "\\." org-blog-file-suffix "$")
    "\.html"
    (replace-regexp-in-string
     (expand-file-name org-blog-root-dir)
     org-blog-url
     fname t) t))
 
+(defun org-blog-get-date-from-article-file (fname)
+  "This function takes a file name of article and returns
+a associated list of date."
+  (interactive)
+  (let ((f (file-name-nondirectory fname)))
+    (destructuring-bind (YYYY MM DD &rest title)
+        (split-string f "-")
+      (list (cons :year (string-to-number YYYY))
+            (cons :month (string-to-number MM))
+            (cons :day (string-to-number DD))))))
+
+(defun org-blog-article-newer-than-p (x y)
+  "This function returns t when x is newer than y using date estimation
+by `org-blog-get-date-from-article-file'. This function expects the arguments
+to be YYYY-MM-DD-title format. It's an ugly implementation..."
+  (interactive)
+  (let ((x-date (org-blog-get-date-from-article-file x))
+        (y-date (org-blog-get-date-from-article-file y)))
+    (cond
+     ((> (assoc :year x-date) (assoc :year y-date))
+      t)
+     ((< (assoc :year x-date) (assoc :year y-date))
+      nil)
+     ((> (assoc :month x-date) (assoc :month y-date))
+      t)
+     ((< (assoc :month x-date) (assoc :month y-date))
+      nil)
+     ((> (assoc :day x-date) (assoc :day y-date))
+      t)
+     ((< (assoc :day x-date) (assoc :day y-date))
+      nil)
+     (t
+      (file-newer-than-file-p x y)))))
+
 (defun org-blog-article-files ()
+  "`org-blog-article-files' returns a list of file names of articles.
+The list is sorted by date, NOT time stamp."
   (interactive)
   (let ((all-files (directory-files
                     (org-blog-article-directory)
                     t (concat "^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-.*\."
                               org-blog-file-suffix "$"))))
-    (sort (copy-list all-files) #'file-newer-than-file-p)))
+    (sort (copy-list all-files) #'org-blog-article-newer-than-p)))
 
 (defun org-blog-misc-org-files ()
   "returns org files which are not articles nor menu"
@@ -157,8 +196,7 @@ org-blog."
   (let ((all-files (org-blog-article-files)))
     (message "%s articles" (length all-files))
     ;; sort file name's by the time-stamp
-    (let ((sorted-files (sort (copy-list all-files) #'file-newer-than-file-p)))
-      (remove-if #'null (subseq sorted-files 0 org-blog-max-article-num)))))
+    (remove-if #'null (subseq all-files 0 org-blog-max-article-num))))
 
 (defun org-blog-top-page-recent-articles ()
   (interactive)
