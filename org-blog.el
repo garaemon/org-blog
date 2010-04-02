@@ -72,13 +72,12 @@ we want to check by absolute path."
 
 (defun org-blog-extract-title-string ()
   "returns the title of current-buffer.
-Titles are following #+TITLE:"
+Titles are following #+TITLE:.
+After calling this function, point is located the next line of #+TITLE: foovar."
   (interactive)
   (goto-char (point-min))
   ;; search #+TITLE:
-  (search-forward "#+TITLE:" nil t)     ;NB: replace by reglar expression search
-                                        ; and add "^", because #+TITLE: must be
-                                        ; started from the beggining of line.
+  (re-search-forward "^#\\+TITLE:" nil t)
   (goto-char (match-end 0))
   (let ((start-pos (point)))
     (forward-line)
@@ -87,37 +86,51 @@ Titles are following #+TITLE:"
       (buffer-substring start-pos end-position))))
 
 (defun org-blog-article-file-to-append-string (fname)
+  "org-blog generate the file which is called appended article file.
+This function takes a file name, that is expected to be org file,
+and returns the string which are converted for appended article file."
   (interactive)
-  (org-blog-kill-file-buffer-if-not-visited
-   (fname)
-   (org-mode)
-   (goto-char (point-min))
+  (org-blog-kill-file-buffer-if-not-visited ;if not visited `fname', we kill
+   (fname)                     ;the buffer after calling this function
+   (org-mode)                  ;turn on org-mode for current-buffer
+   (goto-char (point-min))     ;goto the begining of buffer
    (let ((title (org-blog-extract-title-string)))
+     ;; go to the beginning of contents of org-mode
      (re-search-forward (concat "^" outline-regexp) nil t)
      (goto-char (match-beginning 0))
      (let ((from (point)))
        (set-mark (point))
        (goto-char (point-max))
-       (org-do-demote)                   ;indent to right
+       (org-do-demote)                  ;indent to right
        (concat
         (org-blog-title-to-string title fname)
         (buffer-substring from (point-max)))))))
 
 (defun org-blog-abs-path->rel-path (abs-path)
+  "convert `abs-path', that is absolute path of local file system, to
+url-path, that is absolute path of remove server file system."
   (file-relative-name abs-path (expand-file-name org-blog-root-dir)))
 
 (defun org-blog-title-to-string (title fname)
+  "This function takes a title: `title' and the file name `fname', and
+returns the title string which has the link to `fname' in output file system."
   (format "\n* [[%s][%s]]\n" (org-blog-resolve-org-file-path fname) title))
 
 (defun org-blog-article-directory ()
+  "This function returns the path to the directory which has the articles of
+org-blog."
   (interactive)
-  (expand-file-name  org-blog-root-dir))
+  (expand-file-name org-blog-root-dir))
 
 (defun org-blog-file-name->url (fname)
+  (interactive)
   (replace-regexp-in-string
-   (expand-file-name org-blog-root-dir)
-   org-blog-url
-   fname t))
+   "\.org$"
+   "\.html"
+   (replace-regexp-in-string
+    (expand-file-name org-blog-root-dir)
+    org-blog-url
+    fname t) t))
 
 (defun org-blog-article-files ()
   (interactive)
@@ -376,7 +389,7 @@ Titles are following #+TITLE:"
                               all-files)))
       (mapcar* #'(lambda (fname title)
                    (list (cons :about (org-blog-file-name->url fname))
-                         (cons :link fname)
+                         (cons :link (org-blog-file-name->url fname))
                          (cons :title title)))
                all-files all-titles))))
 
