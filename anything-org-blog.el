@@ -29,8 +29,8 @@
                            (call-interactively (intern (car (split-string x)))))))
             )))
 
-(setq anything-c-org-blog-sources
-      (list anything-c-org-blog-functions anything-c-org-blog-articles))
+(defvar anything-c-org-blog-sources
+  (list anything-c-org-blog-functions anything-c-org-blog-articles))
 
 (defun anything-org-blog ()
   (interactive)
