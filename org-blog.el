@@ -16,6 +16,7 @@
 (defvar org-blog-update-command "upload-script.sh")
 (defvar org-blog-max-article-num 5)
 (defvar org-blog-max-recent-article-num 15)
+(defvar org-blog-styles nil)
 
 (defmacro org-blog-with-temp-buffer (buf &rest args)
   "This macro takes a buffer `buf', copy the texts of `buf'
@@ -154,17 +155,17 @@ to be YYYY-MM-DD-title format. It's an ugly implementation..."
   (let ((x-date (org-blog-get-date-from-article-file x))
         (y-date (org-blog-get-date-from-article-file y)))
     (cond
-     ((> (assoc :year x-date) (assoc :year y-date))
+     ((> (cdr (assoc :year x-date)) (cdr (assoc :year y-date)))
       t)
-     ((< (assoc :year x-date) (assoc :year y-date))
+     ((< (cdr (assoc :year x-date)) (cdr (assoc :year y-date)))
       nil)
-     ((> (assoc :month x-date) (assoc :month y-date))
+     ((> (cdr (assoc :month x-date)) (cdr (assoc :month y-date)))
       t)
-     ((< (assoc :month x-date) (assoc :month y-date))
+     ((< (cdr (assoc :month x-date)) (cdr (assoc :month y-date)))
       nil)
-     ((> (assoc :day x-date) (assoc :day y-date))
+     ((> (cdr (assoc :day x-date)) (cdr (assoc :day y-date)))
       t)
-     ((< (assoc :day x-date) (assoc :day y-date))
+     ((< (cdr (assoc :day x-date)) (cdr (assoc :day y-date)))
       nil)
      (t
       (file-newer-than-file-p x y)))))
@@ -180,21 +181,19 @@ The list is sorted by date, NOT time stamp."
     (sort (copy-list all-files) #'org-blog-article-newer-than-p)))
 
 (defun org-blog-misc-org-files ()
-  "returns org files which are not articles nor menu"
+  "returns org files which are not articles nor menu file."
   (let ((all-files (directory-files
                     (org-blog-article-directory)
-                    t (concat org-blog-file-suffix "$")))
+                    t (concat "\\." org-blog-file-suffix "$")))
         (articles (org-blog-article-files))
         (menu-file (format "%s/%s" org-blog-root-dir org-blog-menu-file)))
-    (remove-if
-     #'(lambda (x)
-         (member x (cons menu-file articles)))
-     all-files)))
+    (remove-if #'(lambda (x)
+                   (member x (cons menu-file articles)))
+               all-files)))
 
 (defun org-blog-top-page-article-files ()
   (interactive)
   (let ((all-files (org-blog-article-files)))
-    (message "%s articles" (length all-files))
     ;; sort file name's by the time-stamp
     (remove-if #'null (subseq all-files 0 org-blog-max-article-num))))
 
@@ -209,9 +208,12 @@ The list is sorted by date, NOT time stamp."
 #+STYLE: <link rel=\"alternate\" type=\"application/rss+xml\" title=\"RSS\" href=\""
                   org-blog-url "/" org-blog-rss-file
                   "\" /> 
-#+TITLE: " org-blog-title "\n"
-                  "#+STYLE: <link rel=\"stylesheet\" type=\"text/css\" href=\"worg.css\" />\n"
-                  )))
+#+TITLE: " org-blog-title "\n"))
+  ;; insert styles
+  (dolist (s org-blog-styles)
+    (insert (concat "#+STYLE: " s "\n")))
+  ;;"#+STYLE: <link rel=\"stylesheet\" type=\"text/css\" href=\"worg.css\" />\n"
+  )
 
 (defun org-blog-insert-recent-articles (recent-articles)
   "recent-artciels => list of file paths"
