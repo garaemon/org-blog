@@ -141,11 +141,14 @@ This function also replaces file name suffix .org to .html."
 a associated list of date."
   (interactive)
   (let ((f (file-name-nondirectory fname)))
-    (destructuring-bind (YYYY MM DD &rest title)
+    (destructuring-bind (YYYY MM DD hh min ss &rest title)
         (split-string f "-")
       (list (cons :year (string-to-number YYYY))
             (cons :month (string-to-number MM))
-            (cons :day (string-to-number DD))))))
+            (cons :day (string-to-number DD))
+            (cons :hour (string-to-number hh))
+            (cons :minute (string-to-number min))
+            (cons :sec (string-to-number ss))))))
 
 (defun org-blog-article-newer-than-p (x y)
   "This function returns t when x is newer than y using date estimation
@@ -167,6 +170,18 @@ to be YYYY-MM-DD-title format. It's an ugly implementation..."
       t)
      ((< (cdr (assoc :day x-date)) (cdr (assoc :day y-date)))
       nil)
+     ((< (cdr (assoc :hour x-date)) (cdr (assoc :hour y-date)))
+      nil)
+     ((> (cdr (assoc :hour x-date)) (cdr (assoc :hour y-date)))
+      t)
+     ((< (cdr (assoc :minute x-date)) (cdr (assoc :minute y-date)))
+      nil)
+     ((> (cdr (assoc :minute x-date)) (cdr (assoc :minute y-date)))
+      t)
+     ((< (cdr (assoc :sec x-date)) (cdr (assoc :sec y-date)))
+      nil)
+     ((> (cdr (assoc :sec x-date)) (cdr (assoc :sec y-date)))
+      t)
      (t
       (file-newer-than-file-p x y)))))
 
@@ -176,7 +191,7 @@ The list is sorted by date, NOT time stamp."
   (interactive)
   (let ((all-files (directory-files
                     (org-blog-article-directory)
-                    t (concat "^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-.*\."
+                    t (concat "^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-.*\."
                               org-blog-file-suffix "$"))))
     (sort (copy-list all-files) #'org-blog-article-newer-than-p)))
 
@@ -375,7 +390,8 @@ The list is sorted by date, NOT time stamp."
    "<?xml version=\"1.0\" encoding=\"utf-8\" ?>
 <rdf:RDF 
   xmlns=\"http://purl.org/rss/1.0/\"
-  xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" 
+  xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"
+  xmlns:dc=\"http://purl.org/dc/elements/1.1/\"
   xml:lang=\"ja\">")
   )
 
@@ -386,9 +402,11 @@ The list is sorted by date, NOT time stamp."
 <title>%s</title>
 <link>%s</link>
 <description>%s</description>
+  <dc:date>%s</dc:date>
   <items>
    <rdf:Seq>" org-blog-url org-blog-rss-file
-   org-blog-title org-blog-url org-blog-rss-description)
+   org-blog-title org-blog-url org-blog-rss-description
+   (org-blog-rss-date-string (car items)))
            (apply #'concat
                   (mapcar #'(lambda (item)
                               (format "<rdf:li rdf:resource=\"%s\" />\n"
@@ -402,16 +420,29 @@ The list is sorted by date, NOT time stamp."
   (dolist (item items)
     (org-blog-insert-rss-item item)))
 
+(defun org-blog-rss-date-string (items)
+  (format "%s-%02d-%02dT%02d:%02d:%02d+%s"
+          (cdr (assoc :year items))
+          (cdr (assoc :month items))
+          (cdr (assoc :day items))
+          (cdr (assoc :hour items))
+          (cdr (assoc :minute items))
+          (cdr (assoc :sec items))
+          (org-blog-zone-offset-string)))
+
 (defun org-blog-insert-rss-item (item)
   (insert (format "<item rdf:about=\"%s\">
   <title>%s</title>
   <link>%s</link>
   <description>%s</description>
+  <dc:date>%s</dc:date>
  </item>"
                   (cdr (assoc :about item))
                   (cdr (assoc :title item))
                   (cdr (assoc :link item))
-                  (cdr (assoc :title item)))))
+                  (cdr (assoc :title item))
+                  (org-blog-rss-date-string item)
+                  )))
 
 (defun org-blog-insert-rss-footer ()
   (insert "</rdf:RDF>\n"))
@@ -428,9 +459,11 @@ The list is sorted by date, NOT time stamp."
                                    (org-blog-extract-title-string)))
                               all-files)))
       (mapcar* #'(lambda (fname title)
-                   (list (cons :about (org-blog-file-name->url fname))
-                         (cons :link (org-blog-file-name->url fname))
-                         (cons :title title)))
+                   (append
+                    (list (cons :about (org-blog-file-name->url fname))
+                          (cons :link (org-blog-file-name->url fname))
+                          (cons :title title))
+                    (org-blog-get-date-from-article-file fname)))
                all-files all-titles))))
 
 (defun org-blog-gen-rss ()
@@ -446,7 +479,7 @@ The list is sorted by date, NOT time stamp."
         (goto-char (point-max))
         (org-blog-insert-rss-footer)
         ))
-    ))        
+    ))
 
 (defun org-blog-publish ()
   (interactive)
@@ -460,19 +493,28 @@ The list is sorted by date, NOT time stamp."
   (shell-command org-blog-update-command)
   )
 
+(defun org-blog-zone-offset-string ()
+  (let ((offset (elt (decode-time (current-time)) 8)))
+    (let* ((h (/ offset (* 60 60)))
+           (m (/ (- offset (* h 60 60)) 60)))
+      (format "%02d:%02d" h m))))
+
 (defun org-blog-write-article (file-title title)
-  (interactive "sgive me file-name(in ASCII): \nsgive me title(MultiByte character allowed):")
-  (let* ((YYYY-MM-DD (format-time-string "%Y-%m-%d" (current-time)))
+  (interactive
+   "sgive me file-name(in ASCII): \nsgive me title(MultiByte character allowed):")
+  (let* ((YYYY-MM-DD-hh-mm-ss
+          (format-time-string "%Y-%m-%d-%H-%M-%S" (current-time)))
          (fname (format "%s/%s-%s.%s" org-blog-root-dir
-                        YYYY-MM-DD file-title org-blog-file-suffix)))
+                        YYYY-MM-DD-hh-mm-ss
+                        file-title org-blog-file-suffix)))
     (if (file-exists-p fname)
         (find-file fname)
       (with-current-buffer (find-file fname)
-        ;; #+TITLE: YYYY-MM-DD title
+        ;; #+TITLE: YYYY-MM-DD-hh-mm-ss title
         (goto-char (point-min))
         (insert "# -*- coding: utf-8 -*-\n")
         (goto-char (point-max))
-        (insert (format "#+TITLE: %s %s\n" YYYY-MM-DD title))
+        (insert (format "#+TITLE: %s %s\n" YYYY-MM-DD-hh-mm-ss title))
         (goto-char (point-max))))))
 
 (provide 'org-blog)
