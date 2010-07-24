@@ -100,12 +100,15 @@ and returns the string which are converted for appended article file."
      (re-search-forward (concat "^" outline-regexp) nil t)
      (goto-char (match-beginning 0))
      (let ((from (point)))
-       (set-mark (point))
+       (push-mark (point))
        (goto-char (point-max))
        (org-do-demote)                  ;indent to right
-       (concat
-        (org-blog-title-to-string title fname)
-        (buffer-substring from (point-max)))))))
+       (unwind-protect
+           (concat
+            (org-blog-title-to-string title fname)
+            (buffer-substring from (point-max)))
+         (org-do-promote)
+         (pop-mark))))))
 
 (defun org-blog-abs-path->rel-path (abs-path)
   "convert `abs-path', that is absolute path of local file system, to
