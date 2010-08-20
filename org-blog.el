@@ -218,8 +218,10 @@ The list is sorted by date, NOT time stamp."
 (defun org-blog-top-page-recent-articles ()
   (interactive)
   (let ((all-files (org-blog-article-files)))
-    (let ((sorted-files (sort (copy-list all-files) #'file-newer-than-file-p)))
-      (remove-if #'null (subseq sorted-files 0 org-blog-max-recent-article-num)))))
+    (let ((sorted-files
+           (sort (copy-list all-files) #'org-blog-article-newer-than-p)))
+      (remove-if #'null
+                 (subseq sorted-files 0 org-blog-max-recent-article-num)))))
 
 (defun org-blog-insert-title ()
   (insert (concat "# -*- coding: utf-8 -*-
